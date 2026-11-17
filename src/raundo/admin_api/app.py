@@ -102,6 +102,8 @@ from raundo.services.support_tickets import (
 COOKIE = "raundo_admin"
 _LOGIN_FAILS: dict[str, list[float]] = {}
 _MFA_FAILS: dict[str, list[float]] = {}
+_FAILURE_WINDOW_SECONDS = 600
+_MAX_FAILURE_BUCKETS = 2048
 _MFA_EXEMPT_PATHS = {
     "/auth/me",
     "/auth/logout",
@@ -255,13 +257,32 @@ async def health() -> dict:
     return {"status": "ok"}
 
 
-def _rate_ok(login_name: str) -> bool:
+def _recent_failures(buckets: dict[str, list[float]], key: str) -> list[float]:
+    """Bound short-lived in-memory login/MFA counters, even for bogus usernames.
+
+    The limiter is intentionally local to this process. A distributed deployment
+    still needs a shared rate limiter in the reverse proxy or Redis.
+    """
     import time
 
     now = time.time()
-    window = [t for t in _LOGIN_FAILS.get(login_name, []) if now - t < 600]
-    _LOGIN_FAILS[login_name] = window
-    return len(window) < 8
+    window = [t for t in buckets.get(key, []) if now - t < _FAILURE_WINDOW_SECONDS]
+    if window:
+        buckets[key] = window
+    else:
+        buckets.pop(key, None)
+
+    if key not in buckets and len(buckets) >= _MAX_FAILURE_BUCKETS:
+        for name, times in list(buckets.items()):
+            if not times or times[-1] <= now - _FAILURE_WINDOW_SECONDS:
+                buckets.pop(name, None)
+        while len(buckets) >= _MAX_FAILURE_BUCKETS:
+            buckets.pop(next(iter(buckets)))
+    return window
+
+
+def _rate_ok(login_name: str) -> bool:
+    return len(_recent_failures(_LOGIN_FAILS, login_name)) < 8
 
 
 @app.post("/auth/login")
@@ -352,12 +373,7 @@ async def me(request: Request, account: AdminAccount = Depends(current_admin)):
 
 
 def _mfa_rate_ok(session_id: str) -> bool:
-    import time
-
-    now = time.time()
-    window = [t for t in _MFA_FAILS.get(session_id, []) if now - t < 600]
-    _MFA_FAILS[session_id] = window
-    return len(window) < 10
+    return len(_recent_failures(_MFA_FAILS, session_id)) < 10
 
 
 def _mfa_note_failure(session_id: str) -> None:
