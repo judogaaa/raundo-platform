@@ -4,7 +4,7 @@ Telegram-платформа для стартапов, инвесторов, ф�
 
 [![CI](https://github.com/judogaaa/raundo-platform/actions/workflows/ci.yml/badge.svg)](https://github.com/judogaaa/raundo-platform/actions/workflows/ci.yml)
 
-![RAUNDO Admin — обзор на тестовых данных](screenshots/audit-Обзор.png)
+![RAUNDO Admin — обзор на тестовых данных](screenshots/public-overview.png)
 
 ## Что реализовано
 
@@ -18,7 +18,15 @@ Telegram-платформа для стартапов, инвесторов, ф�
 | Подписки | Серверный каталог Premium, Telegram Stars и адаптер ЮKassa; демо по умолчанию |
 | Администрирование | Роли, сессии, TOTP, журнал действий, аналитика и доставка уведомлений через outbox |
 
-![Демонстрационная карточка организации](artifacts/raundo-full-e2e/organization-demo-vector.png)
+## Интерфейс админки
+
+![Каталог анкет на тестовых данных](screenshots/public-catalog.png)
+
+| Модерация | Поддержка |
+|---|---|
+| ![Очередь модерации](screenshots/public-moderation.png) | ![Обращения поддержки](screenshots/public-support.png) |
+
+![Тестовые подписки Premium](screenshots/public-premium.png)
 
 Все опубликованные снимки сделаны с тестовыми данными. Они не показывают реальных пользователей, обращения или платёжные операции.
 
