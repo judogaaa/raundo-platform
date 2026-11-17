@@ -23,14 +23,25 @@ from raundo.models.investor import InvestorProfile
 from raundo.models.organization import FundingOrganization, OrganizationMembership
 from raundo.models.startup import Startup
 from raundo.services.accounts import AccountService
+from raundo.services.consents import CONSENT_PROFILE_PUBLICATION, REQUIRED_KINDS, ConsentService
 from raundo.services.investors import InvestorService
 from raundo.services.startups import StartupService
+from raundo.testing.e2e_guard import assert_e2e_db_url
 
 TICKET_NUMBER = "SUP-E2E-001"
 TICKET_CLARIFY_NUMBER = "SUP-E2E-002"
 TICKET_CONFIRMED_NUMBER = "SUP-E2E-003"
 COMPLAINT_NUMBER = "CMP-E2E-001"
 FIXTURES_PATH = __import__("pathlib").Path(__file__).resolve().parents[1] / "admin-web" / ".e2e-fixtures.json"
+
+
+
+async def _bind_demo_user(session, **values):
+    """Explicit consent for fictional E2E actors; never used for real users."""
+    user = await AccountService(session).bind_telegram_user(**values)
+    for kind in (*REQUIRED_KINDS, CONSENT_PROFILE_PUBLICATION):
+        await ConsentService(session).grant(user.id, kind, source="e2e_fixture")
+    return user
 
 
 async def _fill_minimal_startup(startup, svc: StartupService) -> None:
@@ -170,14 +181,14 @@ async def _ensure_investor_cards(session, admin_actor_id) -> tuple[str, str]:
         await session.delete(o)
     await session.flush()
 
-    card_user = await AccountService(session).bind_telegram_user(
+    card_user = await _bind_demo_user(session,
         telegram_id=991_011,
         username="e2e_card_investor",
         first_name="Карточка",
         last_name="Инвестор",
         language_code="ru",
     )
-    rev_user = await AccountService(session).bind_telegram_user(
+    rev_user = await _bind_demo_user(session,
         telegram_id=991_012,
         username="e2e_revision_investor",
         first_name="Повторная",
@@ -374,6 +385,7 @@ async def main() -> int:
     # Fixture accounts are Premium; the limit is raised only inside this seeder
     # process so several test profiles can exist without touching prod rules.
     os.environ.setdefault("RAUNDO_PROFILE_LIMIT_PRO", "3")
+    assert_e2e_db_url(os.environ.get("DATABASE_URL", ""))
     factory = get_session_factory()
     async with factory() as session:
         await ensure_catalog_seeded(session)
@@ -384,35 +396,35 @@ async def main() -> int:
             await session.delete(stale_account)
         await session.execute(delete(AdminInvite).where(AdminInvite.login.like("e2e_inv_%")))
         await session.flush()
-        founder = await AccountService(session).bind_telegram_user(
+        founder = await _bind_demo_user(session,
             telegram_id=991_002,
             username="e2e_founder",
             first_name="E2E",
             last_name="Founder",
             language_code="ru",
         )
-        investor_user = await AccountService(session).bind_telegram_user(
+        investor_user = await _bind_demo_user(session,
             telegram_id=991_004,
             username="e2e_investor_user",
             first_name="E2E",
             last_name="Investor",
             language_code="ru",
         )
-        target_user = await AccountService(session).bind_telegram_user(
+        target_user = await _bind_demo_user(session,
             telegram_id=991_007,
             username="e2e_complaint_target",
             first_name="Нарушитель",
             last_name="E2E",
             language_code="ru",
         )
-        action_user = await AccountService(session).bind_telegram_user(
+        action_user = await _bind_demo_user(session,
             telegram_id=991_008,
             username="e2e_action_user",
             first_name="Действие",
             last_name="E2E",
             language_code="ru",
         )
-        restricted_user = await AccountService(session).bind_telegram_user(
+        restricted_user = await _bind_demo_user(session,
             telegram_id=991_009,
             username="e2e_restricted_user",
             first_name="Ограниченный",
@@ -501,7 +513,7 @@ async def main() -> int:
 
         ticket = await session.scalar(select(SupportTicket).where(SupportTicket.public_number == TICKET_NUMBER))
         if ticket is None:
-            owner = await AccountService(session).bind_telegram_user(
+            owner = await _bind_demo_user(session,
                 telegram_id=991_003,
                 username="e2e_support_user",
                 first_name="Support",
