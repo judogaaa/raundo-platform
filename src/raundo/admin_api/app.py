@@ -1956,10 +1956,11 @@ async def catalog_list(
         if like:
             field = getattr(model, title_attr)
             clauses.append(field.ilike(like))
-            clauses.append(User.username.ilike(like))
+            clauses.append(User.username.ilike(f"%{str(q).strip().lstrip('@')}%"))
             clauses.append(User.first_name.ilike(like))
             if search_uuid:
                 clauses.append(model.id == search_uuid)
+            if str(q).strip().isdigit() and int(q) <= 2**63 - 1:
                 clauses.append(User.telegram_id == int(q))
             stmt = stmt.where(or_(*clauses))
         elif search_uuid:
@@ -1995,6 +1996,8 @@ async def catalog_list(
                     "telegram_id": owner.telegram_id if owner else None,
                     "premium": False,
                     "_owner_id": owner.id if owner else None,
+                    "_obj": obj,
+                    "_catalog_fund": kind == "organization" and _catalog_is_fund(obj),
                 }
             )
 
@@ -2048,7 +2051,10 @@ async def catalog_list(
 
     if premium is not None:
         rows = [row for row in rows if row["premium"] is premium]
-    rows.sort(key=lambda row: row.get(sort if sort in ("created_at", "updated_at") else "updated_at") or "", reverse=True)
+    sort_field = {"updated": "updated_at", "created": "created_at"}.get(sort, sort)
+    if sort_field not in ("created_at", "updated_at"):
+        sort_field = "updated_at"
+    rows.sort(key=lambda row: row.get(sort_field) or "", reverse=True)
 
     counts = {
         "startup": {"total": 0, "statuses": {}},
@@ -2057,10 +2063,8 @@ async def catalog_list(
         "organization": {"total": 0, "statuses": {}},
     }
     for row in rows:
-        "fund" if row["kind"] == "organization" and _catalog_is_fund(
-            next((o for o in []), None)
-        ) else row["kind"]
-        key = "fund" if row["kind"] == "organization" and row["_catalog_fund"] else row["kind"]
+        is_fund = row.pop("_catalog_fund")
+        key = "fund" if is_fund else row["kind"]
         counts[key]["total"] += 1
         counts[key]["statuses"][row["status"]] = counts[key]["statuses"].get(row["status"], 0) + 1
 

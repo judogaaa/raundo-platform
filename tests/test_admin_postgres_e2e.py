@@ -790,17 +790,52 @@ async def test_catalog_lists_drafts_and_opens_detail(factory) -> None:  # noqa: 
             language_code="ru",
         )
         startup = await StartupService(session).create_draft(founder.id, "Catalog Draft")
+        startup.ask_amount_minor = 12_000_000
+        startup.ask_currency = "RUB"
+        await StartupService(session).add_photo(
+            startup, telegram_file_id="catalog-fixture", file_unique_id="catalog-fixture",
+        )
+        from raundo.models.organization import FundingOrganization
+
+        organizations = [
+            FundingOrganization(name="Catalog Fund", normalized_name="catalog fund",
+                                participant_type="vc_fund", created_by_user_id=founder.id),
+            FundingOrganization(name="Catalog Accelerator", normalized_name="catalog accelerator",
+                                participant_type="accelerator", created_by_user_id=founder.id),
+        ]
+        session.add_all(organizations)
         await session.commit()
         startup_id = startup.id
     try:
         async with _client() as client:
             assert (await client.get("/catalog")).status_code == 401
             await _login(client, owner.login)
-            listed = await client.get("/catalog?type=startup&status=draft")
+            listed = await client.get("/catalog?profile_type=startup&status=draft")
             assert listed.status_code == 200, listed.text
             assert any(item["id"] == str(startup_id) for item in listed.json()["items"])
+            item = next(item for item in listed.json()["items"] if item["id"] == str(startup_id))
+            assert item["cover_url"].endswith("/photos/1")
+            assert "120,000" in item["amount_label"]
+            for query in ("Catalog", "@catalog_user", str(founder.telegram_id), str(startup_id)):
+                response = await client.get("/catalog", params={"q": query})
+                assert response.status_code == 200, response.text
+                assert any(row["id"] == str(startup_id) for row in response.json()["items"])
+            all_types = await client.get("/catalog", params={"q": "Catalog"})
+            assert all_types.status_code == 200, all_types.text
+            times = [row["updated_at"] or "" for row in all_types.json()["items"]]
+            assert times == sorted(times, reverse=True)
+            assert all_types.json()["counts"]["fund"]["total"] >= 1
+            assert all_types.json()["counts"]["organization"]["total"] >= 1
+            assert all(not key.startswith("_") for row in all_types.json()["items"] for key in row)
+            funds = await client.get("/catalog", params={"q": "Catalog", "profile_type": "fund"})
+            assert funds.status_code == 200, funds.text
+            assert [row["title"] for row in funds.json()["items"]] == ["Catalog Fund"]
             detail = await client.get(f"/catalog/startup/{startup_id}")
             assert detail.status_code == 200, detail.text
             assert detail.json()["item"]["name"] == "Catalog Draft"
     finally:
+        async with factory() as session:
+            for organization in organizations:
+                await session.delete(await session.get(type(organization), organization.id))
+            await session.commit()
         await _cleanup(factory, accounts=[owner], users=[founder])
