@@ -85,7 +85,7 @@ ADMIN_PLACEHOLDER = (
 )
 
 PAYSUPPORT = (
-    "Оплата Premium: карта и СБП на сайте payments.example.invalid, цифровой доступ в Telegram "
+    "Оплата Premium: карта и СБП на странице оплаты, цифровой доступ в Telegram "
     "продаётся через Telegram Stars. Возврат рассматривается поддержкой RAUNDO в течение "
     "5 календарных дней; для Stars используется возврат платежа Telegram по вашему обращению. "
     "Напишите в /support, если нужна помощь."

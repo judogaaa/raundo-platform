@@ -724,7 +724,7 @@ async def cb_method(
                 ],
                 [
                     InlineKeyboardButton(
-                        text="📄 Оферта", url="https://payments.example.invalid/legal/offer"
+                        text="📄 Оферта", url=f"{get_settings().checkout_base_url.rstrip('/')}/legal/offer"
                     )
                 ],
                 _back_row(_cb_plan(str(plan_code)), "⬅️ К тарифу"),

@@ -352,7 +352,7 @@ async def delete_account_cancel(callback: CallbackQuery, state: FSMContext) -> N
         await callback.message.answer("Удаление отменено.", reply_markup=main_menu())
 
 
-PUBLIC_SITE = "https://payments.example.invalid"
+PUBLIC_SITE = get_settings().checkout_base_url.rstrip("/")
 
 LEGAL_LINKS_TEXT = (
     "⚖️ <b>Документы RAUNDO</b>\n\n"

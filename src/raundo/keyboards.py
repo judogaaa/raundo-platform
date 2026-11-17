@@ -12,6 +12,8 @@ from aiogram.types import (
     ReplyKeyboardMarkup,
 )
 
+from raundo.config import get_settings
+
 MENU_RATE = "🚀 Оценивать"
 MENU_TOP = "🏆 Топ-10"
 MENU_STARTUP = "📝 Мой стартап"
@@ -78,7 +80,7 @@ def consent_keyboard(selected: set[str] | None = None) -> InlineKeyboardMarkup:
         [
             InlineKeyboardButton(
                 text="📄 Открыть документы",
-                url="https://payments.example.invalid/legal",
+                url=f"{get_settings().checkout_base_url.rstrip('/')}/legal",
             )
         ]
     )
@@ -168,7 +170,7 @@ def onboarding_keyboard(*, consent: bool, age_required: bool) -> InlineKeyboardM
             [InlineKeyboardButton(text="Продолжить", callback_data="onb:continue")]
         )
     rows.append(
-        [InlineKeyboardButton(text="📄 Открыть все документы", url="https://payments.example.invalid/legal")]
+        [InlineKeyboardButton(text="📄 Открыть все документы", url=f"{get_settings().checkout_base_url.rstrip('/')}/legal")]
     )
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
@@ -199,7 +201,7 @@ def publication_consent_keyboard() -> InlineKeyboardMarkup:
             [
                 InlineKeyboardButton(
                     text="📄 Условия распространения",
-                    url="https://payments.example.invalid/legal/profile-publication",
+                    url=f"{get_settings().checkout_base_url.rstrip('/')}/legal/profile-publication",
                 )
             ],
         ]

@@ -368,7 +368,7 @@ export function CatalogPage({
                 type="button"
                 className="panel"
                 onClick={() => void open(item)}
-                style={{ textAlign: "left", cursor: "pointer", padding: 14, minHeight: 130 }}
+                style={{ textAlign: "left", cursor: "pointer", padding: 14, minHeight: 130, minWidth: 0, overflowWrap: "anywhere" }}
               >
                 {item.cover_url ? (
                   <img
