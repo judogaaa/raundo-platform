@@ -13,6 +13,8 @@ import uuid
 from pathlib import Path
 
 import pytest
+from alembic.config import Config
+from alembic.script import ScriptDirectory
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
@@ -20,6 +22,7 @@ from raundo.testing.db_safety import assert_suite_db_drop_allowed
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 REV_BEFORE_PREMIUM = "20261023_0004"
+EXPECTED_HEAD = ScriptDirectory.from_config(Config(str(REPO_ROOT / "alembic.ini"))).get_current_head()
 
 BACKFILL_SQL = (
     "UPDATE startups SET grandfathered_gallery = true "
@@ -243,7 +246,7 @@ async def test_premium_migration_grandfather_backfill_on_postgres() -> None:
             assert offers == 12
 
             ver = await _alembic_version(session)
-            assert ver == "20261027_0007"
+            assert ver == EXPECTED_HEAD
     finally:
         try:
             _run_alembic("upgrade", "head")
