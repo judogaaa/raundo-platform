@@ -77,6 +77,19 @@ class Settings(BaseSettings):
     )
     # HTTPS deployments must mark the admin session cookie Secure.
     admin_cookie_secure: bool = Field(default=False, validation_alias="ADMIN_COOKIE_SECURE")
+    admin_session_ttl_hours: int = Field(default=12, validation_alias="ADMIN_SESSION_TTL_HOURS")
+    # Shared login/MFA throttling. "redis" is mandatory in production; "auto"
+    # uses Redis when reachable and falls back to process memory for local demos.
+    rate_limit_backend: str = Field(default="auto", validation_alias="RATE_LIMIT_BACKEND")
+    login_fail_limit: int = Field(default=5, validation_alias="LOGIN_FAIL_LIMIT")
+    login_ip_fail_limit: int = Field(default=20, validation_alias="LOGIN_IP_FAIL_LIMIT")
+    login_fail_window_seconds: int = Field(
+        default=600, validation_alias="LOGIN_FAIL_WINDOW_SECONDS"
+    )
+    mfa_fail_limit: int = Field(default=10, validation_alias="MFA_FAIL_LIMIT")
+    mfa_ip_fail_limit: int = Field(default=20, validation_alias="MFA_IP_FAIL_LIMIT")
+    # Only these proxy peers may supply X-Forwarded-For (comma-separated IP/CIDR).
+    trusted_proxy_ips: str = Field(default="", validation_alias="TRUSTED_PROXY_IPS")
     # Telegram Bot API egress. When set, every Bot API call goes through this
     # proxy (http://host:port or socks5://host:port) and never falls back to a
     # direct connection. TELEGRAM_REQUIRE_PROXY makes a missing proxy fatal.
@@ -125,6 +138,50 @@ class Settings(BaseSettings):
     def yookassa_configured(self) -> bool:
         return bool((self.yookassa_shop_id or "").strip() and self.yookassa_key())
 
+    def is_production(self) -> bool:
+        return "production" in {
+            self.environment.strip().lower(),
+            self.raundo_env.strip().lower(),
+        }
+
+    def validate_admin_config(self) -> None:
+        """Refuse unsafe production admin settings; never blocks local demos.
+
+        Local ``localhost``/Docker test runs use ``ENVIRONMENT=development`` and
+        keep working with an HTTP cookie and the in-memory limiter.
+        """
+        backend = (self.rate_limit_backend or "").strip().lower()
+        if backend not in {"auto", "memory", "redis"}:
+            raise RuntimeError(
+                "RATE_LIMIT_BACKEND must be one of auto, redis, memory."
+            )
+        if self.admin_session_ttl_hours < 1 or self.admin_session_ttl_hours > 72:
+            raise RuntimeError("ADMIN_SESSION_TTL_HOURS must be between 1 and 72.")
+        if not self.is_production():
+            return
+        if not self.admin_cookie_secure:
+            raise RuntimeError(
+                "Production requires ADMIN_COOKIE_SECURE=true: the admin session "
+                "cookie must never travel over plain HTTP."
+            )
+        if backend != "redis":
+            raise RuntimeError(
+                "Production requires RATE_LIMIT_BACKEND=redis so login/MFA limits "
+                "are shared by every worker."
+            )
+        if not (self.redis_url or "").strip():
+            raise RuntimeError("Production requires REDIS_URL for shared login limits.")
+        if self.site_checkout_enabled and len((self.site_session_secret or "").strip()) < 32:
+            raise RuntimeError(
+                "SITE_SESSION_SECRET must be at least 32 characters when site checkout is enabled."
+            )
+        if self.payments_mode.strip().lower() == "live" and not (
+            self.payments_prices_approved and self.payments_legal_ready
+        ):
+            raise RuntimeError(
+                "Live payments require PAYMENTS_PRICES_APPROVED=true and PAYMENTS_LEGAL_READY=true."
+            )
+
     def require_valid_runtime(self) -> None:
         if not self.bot_token:
             raise RuntimeError("Missing BOT_TOKEN. Set it locally in .env, never GitHub.")
@@ -137,10 +194,7 @@ class Settings(BaseSettings):
             raise RuntimeError("Missing DATABASE_URL.")
         if not self.redis_url:
             raise RuntimeError("Missing REDIS_URL.")
-        is_production = "production" in {
-            self.environment.strip().lower(),
-            self.raundo_env.strip().lower(),
-        }
+        is_production = self.is_production()
         if self.telegram_test_mode and is_production:
             raise RuntimeError(
                 "TELEGRAM_TEST_MODE must never be enabled in production: "
