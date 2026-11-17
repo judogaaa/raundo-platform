@@ -1,0 +1,58 @@
+{
+  "currency": "RUB",
+  "status": "approved",
+  "approved_at": "2026-11-04",
+  "approved_by": "owner",
+  "approval_scope": "Окончательные RUB-цены 12 предложений Premium. Не является разрешением на приём реальных платежей.",
+  "stars": {
+    "status": "approved",
+    "approved_at": "2026-11-04",
+    "approved_by": "owner",
+    "note": "XTR не эквивалентны рублям и не пересчитываются по курсу. Автопродление для Stars не предусмотрено.",
+    "plans": {
+      "community_plus": {
+        "3d": 50,
+        "7d": 100,
+        "30d": 350
+      },
+      "startup_pro": {
+        "3d": 150,
+        "7d": 300,
+        "30d": 900
+      },
+      "investor_pro": {
+        "3d": 500,
+        "7d": 1000,
+        "30d": 3000
+      },
+      "organization_pro": {
+        "3d": 1000,
+        "7d": 2000,
+        "30d": 6000
+      }
+    }
+  },
+  "plans": {
+    "community_plus": {
+      "3d": 4900,
+      "7d": 9900,
+      "30d": 29900
+    },
+    "startup_pro": {
+      "3d": 14900,
+      "7d": 29900,
+      "30d": 79900
+    },
+    "investor_pro": {
+      "3d": 69900,
+      "7d": 149000,
+      "30d": 499000
+    },
+    "organization_pro": {
+      "3d": 149000,
+      "7d": 299000,
+      "30d": 999000
+    }
+  },
+  "demo_only": true
+}

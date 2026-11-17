@@ -1,0 +1,31 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: raundo
+      POSTGRES_PASSWORD: raundo_local_only
+      POSTGRES_DB: raundo_admin_dev
+    ports:
+      - "127.0.0.1:55432:5432"
+    volumes:
+      - raundo_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U raundo -d raundo_admin_dev"]
+      interval: 5s
+      retries: 15
+
+  redis:
+    image: redis:7-alpine
+    command: redis-server --save 60 1000
+    ports:
+      - "127.0.0.1:56379:6379"
+    volumes:
+      - raundo_redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      retries: 15
+
+volumes:
+  raundo_pgdata:
+  raundo_redisdata:

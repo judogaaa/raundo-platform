@@ -1,0 +1,120 @@
+# RAUNDO — Telegram TEST-ENVIRONMENT stack (isolated Compose project "raundo-test").
+#
+# Purpose: a real Stars purchase + refund cycle inside Telegram's dedicated test
+# environment (https://core.telegram.org/bots/features#dedicated-test-environment).
+# Test Stars are NOT money: the environment is completely separate from
+# production users, chats, orders and the production bot.
+#
+# Isolation rules enforced by scripts/vps/stars-test-up.sh:
+#   * own bot token (a bot created with @BotFather inside the test environment);
+#   * TELEGRAM_TEST_MODE=true -> every call goes to
+#     https://api.telegram.org/bot<token>/test/<method>;
+#   * own PostgreSQL/Redis data directories and credentials;
+#   * no real-money flags (PAYMENTS_MODE is never "live").
+#
+# Telegram egress reuses the already working sing-box sidecar of the production
+# stack read-only over the shared bridge network: no second VPN client, no VPN
+# reconfiguration, no published ports.
+name: raundo-test
+
+x-test-app: &test_app
+  image: raundo-app:test
+  build:
+    context: ..
+    dockerfile: Dockerfile
+  env_file:
+    - ../.env.test
+  environment:
+    ENVIRONMENT: staging
+    # Hard requirement: aiogram TEST API server, never production.
+    TELEGRAM_TEST_MODE: "true"
+    TELEGRAM_PROXY: http://raundo-vpn-1:1080
+    TELEGRAM_REQUIRE_PROXY: "true"
+  restart: unless-stopped
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "3"
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-raundo_test}
+      POSTGRES_USER: ${POSTGRES_USER:-raundo_test}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env.test}
+    volumes:
+      - /opt/raundo-test/data/postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-raundo_test} -d ${POSTGRES_DB:-raundo_test}"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    mem_limit: 512m
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  cache:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command:
+      - sh
+      - -c
+      - exec redis-server --appendonly yes --requirepass "$$REDIS_PASSWORD"
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?set REDIS_PASSWORD in .env.test}
+    volumes:
+      - /opt/raundo-test/data/redis:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$$REDIS_PASSWORD\" ping | grep -q PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    mem_limit: 128m
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Test bot. Service names are unique ("tg_bot", "outbox") so the shared egress
+  # network never shadows production DNS aliases ("bot", "worker", "api").
+  tg_bot:
+    <<: *test_app
+    command: ["python", "-m", "raundo.main"]
+    depends_on:
+      db:
+        condition: service_healthy
+      cache:
+        condition: service_healthy
+    networks:
+      - default
+      - egress
+    mem_limit: 384m
+
+  outbox:
+    <<: *test_app
+    command: ["python", "scripts/run-outbox-worker.py"]
+    depends_on:
+      db:
+        condition: service_healthy
+      cache:
+        condition: service_healthy
+    networks:
+      - default
+      - egress
+    mem_limit: 256m
+
+networks:
+  default:
+    name: raundo-test_default
+  # The production Compose bridge. Used only to reach the working sing-box
+  # egress container; nothing is published and no production service is changed.
+  egress:
+    external: true
+    name: raundo_default

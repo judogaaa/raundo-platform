@@ -1,0 +1,91 @@
+{
+  "edition": "2.0",
+  "edition_date": "2026-11-04",
+  "status": "draft_published",
+  "status_note": "Демонстрационная редакция без реальных реквизитов и юридической силы.",
+  "lawyer_review": false,
+  "archive": [
+    {
+      "edition": "1.0",
+      "date": "2026-11-04",
+      "dir": "archive/2026-11-04-edition-1",
+      "note": "Архив демонстрационных шаблонов"
+    },
+    {
+      "edition": "0.1",
+      "date": "2026-11-03",
+      "dir": "archive/2026-11-03",
+      "note": "Архив демонстрационных шаблонов"
+    }
+  ],
+  "docs": [
+    {
+      "slug": "terms",
+      "file": "v2/02_terms.md",
+      "title": "Пользовательское соглашение RAUNDO",
+      "kind": "document"
+    },
+    {
+      "slug": "privacy",
+      "file": "v2/04_privacy.md",
+      "title": "Политика обработки персональных данных RAUNDO",
+      "kind": "document"
+    },
+    {
+      "slug": "offer",
+      "file": "v2/03_premium_offer.md",
+      "title": "Публичная оферта RAUNDO Premium",
+      "kind": "document"
+    },
+    {
+      "slug": "requisites",
+      "file": "v2/01_requisites.md",
+      "title": "Сведения об исполнителе и контакты RAUNDO",
+      "kind": "document"
+    },
+    {
+      "slug": "payments",
+      "file": "v2/08_payment_and_refunds.md",
+      "title": "Оплата Premium и возвраты — информация для покупателей RAUNDO",
+      "kind": "document"
+    },
+    {
+      "slug": "data-consent",
+      "file": "v2/05_data_processing_consent.md",
+      "title": "Отдельное согласие на обработку персональных данных RAUNDO",
+      "kind": "consent"
+    },
+    {
+      "slug": "profile-publication",
+      "file": "v2/06_profile_publication_consent.md",
+      "title": "Отдельное согласие на распространение персональных данных через анкету RAUNDO",
+      "kind": "document"
+    },
+    {
+      "slug": "marketing-consent",
+      "file": "v2/07_marketing_consent.md",
+      "title": "Отдельное согласие на получение рекламы RAUNDO",
+      "kind": "consent"
+    },
+    {
+      "slug": "image-advertising-consent",
+      "file": "v2/07a_image_advertising_consent.md",
+      "title": "Отдельное разрешение на использование изображения гражданина и его персональных данных в рекламе RAUNDO",
+      "kind": "consent"
+    },
+    {
+      "slug": "moderation",
+      "file": "v2/09_moderation_rules.md",
+      "title": "Правила модерации, знакомств и содержания RAUNDO",
+      "kind": "document"
+    },
+    {
+      "slug": "minors",
+      "file": "v2/11_minor_users.md",
+      "title": "RAUNDO — требования для пользователей 14–17 лет",
+      "kind": "document"
+    }
+  ],
+  "consent_edition": "1.0",
+  "demo_only": true
+}
