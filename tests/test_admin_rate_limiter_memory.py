@@ -6,8 +6,8 @@ import time
 
 from raundo.admin_api.app import (
     _LOGIN_FAILS,
-    _MFA_FAILS,
     _MAX_FAILURE_BUCKETS,
+    _MFA_FAILS,
     _mfa_rate_ok,
     _rate_ok,
 )
