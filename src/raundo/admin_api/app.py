@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import time
 import uuid
 from datetime import datetime, timedelta, timezone
 
@@ -14,6 +15,11 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from raundo import ui
+from raundo.admin_api.login_limiter import (
+    RateLimiterUnavailable,
+    get_login_limiter,
+    resolve_client_ip,
+)
 from raundo.admin_api.security import hash_password, hash_token, new_token, verify_password
 from raundo.config import get_settings
 from raundo.db.session import get_session_factory
@@ -134,6 +140,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Refuse insecure production settings (HTTP cookie, per-process limiter).
+get_settings().validate_admin_config()
+
 
 async def persist_session(session: AsyncSession) -> None:
     """Commit before response so the next request sees writes (login, moderation, support)."""
@@ -187,8 +196,8 @@ def require_roles(account: AdminAccount, allowed: set[str]) -> None:
 
 
 class LoginBody(BaseModel):
-    login: str
-    password: str
+    login: str = Field(min_length=1, max_length=64)
+    password: str = Field(min_length=1, max_length=128)
 
 
 class ReasonBody(BaseModel):
@@ -285,19 +294,56 @@ def _rate_ok(login_name: str) -> bool:
     return len(_recent_failures(_LOGIN_FAILS, login_name)) < 8
 
 
+def _client_ip(request: Request) -> str:
+    settings = get_settings()
+    peer = request.client.host if request.client else None
+    # Only a configured proxy peer may set X-Forwarded-For (checked inside).
+    return resolve_client_ip(peer, request.headers.get("x-forwarded-for"), settings.trusted_proxy_ips)
+
+
+def _too_many_attempts(detail: str = "Слишком много попыток. Подождите и повторите.") -> HTTPException:
+    return HTTPException(status_code=429, detail=detail, headers={"Retry-After": "60"})
+
+
 @app.post("/auth/login")
-async def login(body: LoginBody, response: Response, session: AsyncSession = Depends(db_session)):
+async def login(
+    body: LoginBody,
+    request: Request,
+    response: Response,
+    session: AsyncSession = Depends(db_session),
+):
     key = body.login.strip().lower()
-    if not _rate_ok(key):
-        raise HTTPException(status_code=429, detail="Слишком много попыток. Подождите и повторите.")
+    ip = _client_ip(request)
+    limiter = get_login_limiter(get_settings())
+    try:
+        if await limiter.login_blocked(login=key, ip=ip):
+            raise _too_many_attempts()
+    except RateLimiterUnavailable:
+        raise HTTPException(
+            status_code=503, detail="Ограничитель входа временно недоступен. Повторите позже."
+        ) from None
     result = await session.execute(select(AdminAccount).where(AdminAccount.login == key))
     account = result.scalar_one_or_none()
     if account is None or account.disabled_at is not None or not verify_password(body.password, account.password_hash):
-        import time
-
+        try:
+            allowed = await limiter.record_login_failure(login=key, ip=ip)
+        except RateLimiterUnavailable:
+            raise HTTPException(
+                status_code=503,
+                detail="Ограничитель входа временно недоступен. Повторите позже.",
+            ) from None
+        # Keep the bounded legacy counter for observability/regression tests;
+        # the shared limiter above is authoritative for enforcement.
+        _recent_failures(_LOGIN_FAILS, key)
         _LOGIN_FAILS.setdefault(key, []).append(time.time())
+        if not allowed:
+            raise _too_many_attempts()
         raise HTTPException(status_code=401, detail="Неверный логин или пароль.")
     _LOGIN_FAILS.pop(key, None)
+    try:
+        await limiter.clear_login_failures(login=key, ip=ip)
+    except RateLimiterUnavailable:
+        pass
     now = datetime.now(timezone.utc)
     open_sessions = await session.execute(
         select(AdminSession).where(
@@ -310,13 +356,14 @@ async def login(body: LoginBody, response: Response, session: AsyncSession = Dep
     token = new_token()
     csrf = new_token()
     mfa_verified = now if not account.mfa_enabled else None
+    ttl_hours = get_settings().admin_session_ttl_hours
     session.add(
         AdminSession(
             id=uuid.uuid4(),
             admin_id=account.id,
             token_hash=hash_token(token),
             csrf_token=csrf,
-            expires_at=now + timedelta(hours=12),
+            expires_at=now + timedelta(hours=ttl_hours),
             mfa_verified_at=mfa_verified,
         )
     )
@@ -328,7 +375,7 @@ async def login(body: LoginBody, response: Response, session: AsyncSession = Dep
         samesite="lax",
         path="/",
         secure=bool(get_settings().admin_cookie_secure),
-        max_age=12 * 3600,
+        max_age=ttl_hours * 3600,
     )
     return {
         "role": account.role,
@@ -393,16 +440,35 @@ async def mfa_verify_login(
     if not account.mfa_enabled or sess.mfa_verified_at is not None:
         raise HTTPException(status_code=400, detail="MFA не требуется.")
     key = str(sess.id)
-    if not _mfa_rate_ok(key):
-        raise HTTPException(status_code=429, detail="Слишком много попыток MFA.")
+    ip = _client_ip(request)
+    limiter = get_login_limiter(get_settings())
+    try:
+        if await limiter.mfa_blocked(session_id=key, ip=ip):
+            raise _too_many_attempts("Слишком много попыток MFA.")
+    except RateLimiterUnavailable:
+        raise HTTPException(
+            status_code=503, detail="Ограничитель MFA временно недоступен. Повторите позже."
+        ) from None
     from raundo.services.admin_auth import verify_mfa_code
 
     if not verify_mfa_code(account, body.code):
-        import time
-
+        try:
+            allowed = await limiter.record_mfa_failure(session_id=key, ip=ip)
+        except RateLimiterUnavailable:
+            raise HTTPException(
+                status_code=503,
+                detail="Ограничитель MFA временно недоступен. Повторите позже.",
+            ) from None
+        _recent_failures(_MFA_FAILS, key)
         _MFA_FAILS.setdefault(key, []).append(time.time())
+        if not allowed:
+            raise _too_many_attempts("Слишком много попыток MFA.")
         raise HTTPException(status_code=401, detail="Неверный код.")
     _MFA_FAILS.pop(key, None)
+    try:
+        await limiter.clear_mfa_failures(session_id=key, ip=ip)
+    except RateLimiterUnavailable:
+        pass
     sess.mfa_verified_at = datetime.now(timezone.utc)
     await persist_session(session)
     return {"ok": True}

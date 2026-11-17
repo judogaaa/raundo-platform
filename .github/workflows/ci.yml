@@ -21,9 +21,19 @@ jobs:
         ports:
           - 55432:5432
         options: --health-cmd "pg_isready -U raundo" --health-interval 5s --health-timeout 5s --health-retries 15
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 56379:6379
+        options: >-
+          --health-cmd "redis-cli ping" --health-interval 5s --health-timeout 5s --health-retries 15
     env:
       DATABASE_URL: postgresql+asyncpg://raundo:raundo_local_only@127.0.0.1:55432/raundo_local_suite
       RAUNDO_POSTGRES_SUITE_TESTS: '1'
+      # Shared limiter: proves two workers see the same login/MFA counters.
+      REDIS_URL: redis://127.0.0.1:56379/0
+      RATE_LIMIT_BACKEND: redis
+      RAUNDO_REDIS_SUITE_TESTS: '1'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
